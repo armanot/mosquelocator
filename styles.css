@@ -68,3 +68,30 @@ body {
     text-decoration: underline;
   }
   
+  .facility-item {
+    margin: 5px 0;
+    padding: 5px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    background-color: #f9f9f9;
+  }
+  
+  button {
+    background-color: #007bff;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+  
+  button:hover {
+    background-color: #0056b3;
+  }
+  
+  .collapsible {
+    margin-top: 10px;
+    padding-left: 10px;
+    border-left: 3px solid #007bff;
+  }
+  

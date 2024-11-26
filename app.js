@@ -74,7 +74,9 @@ function addUserLocationMarker(lat, lon) {
 // Find nearby mosques using Overpass API
 function findNearbyMosques(location) {
   const [lat, lon] = location;
-  const url = `https://overpass-api.de/api/interpreter?data=[out:json][timeout:25];(node["amenity"="place_of_worship"]["religion"="muslim"](around:5000,${lat},${lon}););out body;`;
+  const url = `https://overpass-api.de/api/interpreter?data=[out:json][timeout:25];
+    (node["amenity"="place_of_worship"]["religion"="muslim"](around:5000,${lat},${lon});
+     );out body;`;
 
   fetch(url)
     .then((response) => response.json())
@@ -84,7 +86,7 @@ function findNearbyMosques(location) {
         return;
       }
 
-      // Display mosques on the map and list
+      // Display mosques
       displayMosques(data.elements);
     })
     .catch((error) => {
@@ -92,47 +94,42 @@ function findNearbyMosques(location) {
     });
 }
 
-// Display mosques with distance
-function displayMosques(mosques) {
-    const mosqueList = document.getElementById("mosque-list");
-    mosqueList.innerHTML = ""; // Clear previous list items
-  
-    // Calculate distance for each mosque and add it to the object
-    const mosquesWithDistance = mosques.map((mosque) => {
-      const { lat, lon } = mosque;
-      const distance = calculateDistance(userLocation[0], userLocation[1], lat, lon);
-      return { ...mosque, distance }; // Add distance to each mosque object
-    });
-  
-    // Sort mosques by distance (ascending)
-    mosquesWithDistance.sort((a, b) => a.distance - b.distance);
-  
-    // Display each mosque in the sorted order
-    mosquesWithDistance.forEach((mosque) => {
-      const { lat, lon, tags, distance } = mosque;
-      const name = tags.name || "Unnamed Mosque";
-  
-      // Add a marker on the map
-      L.marker([lat, lon])
-        .addTo(map)
-        .bindPopup(
-          `<strong>${name}</strong><br>Distance: ${distance.toFixed(2)} km`
-        );
-  
-      // Create Waze URL
-      const wazeUrl = `https://waze.com/ul?ll=${lat},${lon}&navigate=yes`;
-  
-      // Add to the list view
-      const listItem = document.createElement("li");
-      listItem.innerHTML = `
-        <strong>${name}</strong><br>
-        Distance: ${distance.toFixed(2)} km 
-        <a href="${wazeUrl}" target="_blank" rel="noopener noreferrer">Open in Waze</a>
-      `;
-      mosqueList.appendChild(listItem);
-    });
+// Display mosques with distance and facilities toggle
+async function displayMosques(mosques) {
+  const mosqueList = document.getElementById("mosque-list");
+  mosqueList.innerHTML = ""; // Clear previous list items
+
+  const mosquesWithDistance = mosques.map((mosque, index) => {
+    const { lat, lon } = mosque;
+    const distance = calculateDistance(userLocation[0], userLocation[1], lat, lon);
+    return { ...mosque, distance, id: index }; // Add an ID for unique collapsible sections
+  });
+
+  mosquesWithDistance.sort((a, b) => a.distance - b.distance);
+
+  for (const mosque of mosquesWithDistance) {
+    const { lat, lon, tags, distance, id } = mosque;
+    const name = tags.name || "Unnamed Mosque";
+
+    // Fetch the address
+    const address = await fetchAddress(lat, lon);
+
+    // Add the mosque item
+    const listItem = document.createElement("li");
+    listItem.innerHTML = `
+      <strong>${name}</strong><br>
+      Distance: ${distance.toFixed(2)} km<br>
+      Address: ${address}<br>
+      <a href="https://waze.com/ul?ll=${lat},${lon}&navigate=yes" target="_blank" rel="noopener noreferrer">Open in Waze</a><br>
+      <button onclick="toggleFacilities(${id})">▼ Nearby Facilities</button>
+      <div id="facilities-${id}" class="collapsible" style="display: none;"></div>
+    `;
+    mosqueList.appendChild(listItem);
+
+    // Fetch and display nearby facilities
+    fetchNearbyFacilities(lat, lon, id);
   }
-  
+}
 
 // Calculate the distance using Haversine formula
 function calculateDistance(lat1, lon1, lat2, lon2) {
@@ -152,6 +149,83 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 // Convert degrees to radians
 function degToRad(deg) {
   return deg * (Math.PI / 180);
+}
+
+// Fetch address using Nominatim API
+async function fetchAddress(lat, lon) {
+  const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}`;
+  try {
+    const response = await fetch(url);
+    const data = await response.json();
+    return data.display_name || "Address not available";
+  } catch (error) {
+    console.error("Error fetching address:", error);
+    return "Address not available";
+  }
+}
+
+// Fetch nearby facilities using Overpass API
+function fetchNearbyFacilities(lat, lon, mosqueId) {
+  const url = `https://overpass-api.de/api/interpreter?data=[out:json][timeout:25];
+    (node["amenity"="restaurant"](around:1000,${lat},${lon});
+     node["shop"="convenience"](around:1000,${lat},${lon});
+     node["amenity"="fuel"](around:1000,${lat},${lon});
+    );out body;`;
+
+  fetch(url)
+    .then((response) => response.json())
+    .then((data) => {
+      if (!data.elements || data.elements.length === 0) {
+        console.log(`No facilities found near mosque ${mosqueId}.`);
+        return;
+      }
+
+      // Display facilities
+      displayFacilities(mosqueId, data.elements);
+    })
+    .catch((error) => {
+      console.error("Error fetching facilities:", error);
+    });
+}
+
+// Display facilities in a collapsible section
+function displayFacilities(mosqueId, facilities) {
+  const collapsibleDiv = document.getElementById(`facilities-${mosqueId}`);
+  if (!collapsibleDiv) {
+    console.error(`Collapsible div not found for mosque ${mosqueId}`);
+    return;
+  }
+
+  facilities.forEach((facility) => {
+    const { lat, lon, tags } = facility;
+    const name = tags.name || capitalize(tags.amenity || tags.shop) || "Unnamed Facility";
+    const type = tags.amenity || tags.shop || "Unknown Type";
+
+    // Add facility to the collapsible container
+    const facilityItem = document.createElement("div");
+    facilityItem.className = "facility-item";
+    facilityItem.innerHTML = `
+      <strong>${name}</strong> (${capitalize(type)})<br>
+      <a href="https://waze.com/ul?ll=${lat},${lon}&navigate=yes" target="_blank" rel="noopener noreferrer">Open in Waze</a>
+    `;
+    collapsibleDiv.appendChild(facilityItem);
+  });
+}
+
+// Capitalize the first letter of a string
+function capitalize(str) {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+// Toggle facilities visibility
+function toggleFacilities(id) {
+  console.log(`Toggling facilities for mosque ${id}`);
+  const facilitiesDiv = document.getElementById(`facilities-${id}`);
+  if (facilitiesDiv.style.display === "none") {
+    facilitiesDiv.style.display = "block"; // Show facilities
+  } else {
+    facilitiesDiv.style.display = "none"; // Hide facilities
+  }
 }
 
 // Add event listener to the button
