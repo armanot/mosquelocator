@@ -1,6 +1,7 @@
 let map = L.map('map').setView([0, 0], 2); // Default view
 let userLocation = [0, 0]; // Default user location
 
+
 // Add OpenStreetMap tiles
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 19,
@@ -96,40 +97,41 @@ function findNearbyMosques(location) {
 
 // Display mosques with distance and facilities toggle
 async function displayMosques(mosques) {
-  const mosqueList = document.getElementById("mosque-list");
-  mosqueList.innerHTML = ""; // Clear previous list items
-
-  const mosquesWithDistance = mosques.map((mosque, index) => {
-    const { lat, lon } = mosque;
-    const distance = calculateDistance(userLocation[0], userLocation[1], lat, lon);
-    return { ...mosque, distance, id: index }; // Add an ID for unique collapsible sections
-  });
-
-  mosquesWithDistance.sort((a, b) => a.distance - b.distance);
-
-  for (const mosque of mosquesWithDistance) {
-    const { lat, lon, tags, distance, id } = mosque;
-    const name = tags.name || "Unnamed Mosque";
-
-    // Fetch the address
-    const address = await fetchAddress(lat, lon);
-
-    // Add the mosque item
-    const listItem = document.createElement("li");
-    listItem.innerHTML = `
-      <strong>${name}</strong><br>
-      Distance: ${distance.toFixed(2)} km<br>
-      Address: ${address}<br>
-      <a href="https://waze.com/ul?ll=${lat},${lon}&navigate=yes" target="_blank" rel="noopener noreferrer">Open in Waze</a><br>
-      <button onclick="toggleFacilities(${id})">▼ Nearby Facilities</button>
-      <div id="facilities-${id}" class="collapsible" style="display: none;"></div>
-    `;
-    mosqueList.appendChild(listItem);
-
-    // Fetch and display nearby facilities
-    fetchNearbyFacilities(lat, lon, id);
+    const mosqueList = document.getElementById("mosque-list");
+    mosqueList.innerHTML = ""; // Clear previous list items
+  
+    const mosquesWithDistance = mosques.map((mosque, index) => {
+      const { lat, lon } = mosque;
+      const distance = calculateDistance(userLocation[0], userLocation[1], lat, lon);
+      return { ...mosque, distance, id: index }; // Add an ID for unique collapsible sections
+    });
+  
+    mosquesWithDistance.sort((a, b) => a.distance - b.distance);
+  
+    for (const mosque of mosquesWithDistance) {
+      const { lat, lon, tags, distance, id } = mosque;
+      const name = tags.name || "Unnamed Mosque";
+  
+      // Fetch the address
+      const address = await fetchAddress(lat, lon);
+  
+      // Add the mosque item
+      const listItem = document.createElement("li");
+      listItem.innerHTML = `
+        <strong><i class="fas fa-mosque"></i> ${name}</strong><br>
+        <i class="fas fa-map-marker-alt"></i> Distance: ${distance.toFixed(2)} km<br>
+        <i class="fas fa-address-card"></i> Address: ${address}<br>
+        <a href="https://waze.com/ul?ll=${lat},${lon}&navigate=yes" target="_blank" rel="noopener noreferrer"><i class="fas fa-directions"></i> Open in Waze</a><br>
+        <button onclick="toggleFacilities(${id})" style="margin-top: 5px;"><i class="fas fa-chevron-down"></i> Nearby Facilities</button>
+        <div id="facilities-${id}" class="collapsible" style="display: none;"></div>
+      `;
+      mosqueList.appendChild(listItem);
+  
+      // Fetch and display nearby facilities
+      fetchNearbyFacilities(lat, lon, id);
+    }
   }
-}
+  
 
 // Calculate the distance using Haversine formula
 function calculateDistance(lat1, lon1, lat2, lon2) {
@@ -166,51 +168,53 @@ async function fetchAddress(lat, lon) {
 
 // Fetch nearby facilities using Overpass API
 function fetchNearbyFacilities(lat, lon, mosqueId) {
-  const url = `https://overpass-api.de/api/interpreter?data=[out:json][timeout:25];
-    (node["amenity"="restaurant"](around:1000,${lat},${lon});
-     node["shop"="convenience"](around:1000,${lat},${lon});
-     node["amenity"="fuel"](around:1000,${lat},${lon});
-    );out body;`;
-
-  fetch(url)
-    .then((response) => response.json())
-    .then((data) => {
-      if (!data.elements || data.elements.length === 0) {
-        console.log(`No facilities found near mosque ${mosqueId}.`);
-        return;
-      }
-
-      // Display facilities
-      displayFacilities(mosqueId, data.elements);
-    })
-    .catch((error) => {
-      console.error("Error fetching facilities:", error);
-    });
-}
-
+    const url = `https://overpass-api.de/api/interpreter?data=[out:json][timeout:25];
+      (node["amenity"="restaurant"]["cuisine"="halal"](around:1000,${lat},${lon});
+       node["shop"="convenience"](around:1000,${lat},${lon});
+       node["amenity"="fuel"](around:1000,${lat},${lon});
+      );out body;`;
+  
+    fetch(url)
+      .then((response) => response.json())
+      .then((data) => {
+        if (!data.elements || data.elements.length === 0) {
+          console.log(`No facilities found near mosque ${mosqueId}.`);
+          return;
+        }
+  
+        // Display facilities
+        displayFacilities(mosqueId, data.elements);
+      })
+      .catch((error) => {
+        console.error("Error fetching facilities:", error);
+      });
+  }
+  
 // Display facilities in a collapsible section
 function displayFacilities(mosqueId, facilities) {
-  const collapsibleDiv = document.getElementById(`facilities-${mosqueId}`);
-  if (!collapsibleDiv) {
-    console.error(`Collapsible div not found for mosque ${mosqueId}`);
-    return;
+    const collapsibleDiv = document.getElementById(`facilities-${mosqueId}`);
+    if (!collapsibleDiv) {
+      console.error(`Collapsible div not found for mosque ${mosqueId}`);
+      return;
+    }
+  
+    facilities.forEach((facility) => {
+      const { lat, lon, tags } = facility;
+      const name = tags.name || capitalize(tags.amenity || tags.shop) || "Unnamed Facility";
+      const type = tags.amenity || tags.shop || "Unknown Type";
+      const isHalal = tags.cuisine && tags.cuisine.includes("halal");
+  
+      // Add facility to the collapsible container
+      const facilityItem = document.createElement("div");
+      facilityItem.className = "facility-item";
+      facilityItem.innerHTML = `
+        <strong>${name}</strong> (${capitalize(type)}) ${isHalal ? '<span style="color: green;">[Halal]</span>' : ''}<br>
+        <a href="https://waze.com/ul?ll=${lat},${lon}&navigate=yes" target="_blank" rel="noopener noreferrer">Open in Waze</a>
+      `;
+      collapsibleDiv.appendChild(facilityItem);
+    });
   }
-
-  facilities.forEach((facility) => {
-    const { lat, lon, tags } = facility;
-    const name = tags.name || capitalize(tags.amenity || tags.shop) || "Unnamed Facility";
-    const type = tags.amenity || tags.shop || "Unknown Type";
-
-    // Add facility to the collapsible container
-    const facilityItem = document.createElement("div");
-    facilityItem.className = "facility-item";
-    facilityItem.innerHTML = `
-      <strong>${name}</strong> (${capitalize(type)})<br>
-      <a href="https://waze.com/ul?ll=${lat},${lon}&navigate=yes" target="_blank" rel="noopener noreferrer">Open in Waze</a>
-    `;
-    collapsibleDiv.appendChild(facilityItem);
-  });
-}
+  
 
 // Capitalize the first letter of a string
 function capitalize(str) {
