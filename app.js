@@ -1,5 +1,5 @@
-// Initialize the map
-let map = L.map('map').setView([0, 0], 2); // Default view (center of the world)
+let map = L.map('map').setView([0, 0], 2); // Default view
+let userLocation = [0, 0]; // Default user location
 
 // Add OpenStreetMap tiles
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -7,23 +7,29 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '© OpenStreetMap contributors',
 }).addTo(map);
 
-// Function to get the user's location
+// Get user's location
 function getUserLocation() {
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const lat = position.coords.latitude;
         const lon = position.coords.longitude;
+
+        // Set user location
+        userLocation = [lat, lon];
+
+        // Log user's location
         console.log("Detected Latitude:", lat);
         console.log("Detected Longitude:", lon);
+
         // Center the map on the user's location
-        map.setView([lat, lon], 14);
+        map.setView(userLocation, 14);
 
         // Add marker with reverse geocoding
         addUserLocationMarker(lat, lon);
 
         // Find nearby mosques
-        findNearbyMosques([lat, lon]);
+        findNearbyMosques(userLocation);
       },
       (error) => {
         alert("Unable to retrieve your location.");
@@ -36,38 +42,36 @@ function getUserLocation() {
   }
 }
 
-// Function to add a marker for the user's location with reverse geocoding
+// Add marker for user's location
 function addUserLocationMarker(lat, lon) {
-  const userLocation = [lat, lon];
-
-  // Fetch the location name using Nominatim
   const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}`;
 
   fetch(url)
     .then((response) => response.json())
     .then((data) => {
       const locationName = data.display_name || "Your Location";
-      const marker = L.marker(userLocation, { draggable: true })
+      const marker = L.marker([lat, lon], { draggable: true })
         .addTo(map)
         .bindPopup(`You are here: <br>${locationName}`)
         .openPopup();
 
-      // Allow user to adjust their location by dragging the marker
+      // Allow user to adjust location by dragging the marker
       marker.on("dragend", function (event) {
         const adjustedLocation = event.target.getLatLng();
-        findNearbyMosques([adjustedLocation.lat, adjustedLocation.lng]);
+        userLocation = [adjustedLocation.lat, adjustedLocation.lng];
+        findNearbyMosques(userLocation);
       });
     })
     .catch((error) => {
       console.error("Error fetching location name:", error);
-      L.marker(userLocation, { draggable: true })
+      L.marker([lat, lon], { draggable: true })
         .addTo(map)
         .bindPopup("You are here")
         .openPopup();
     });
 }
 
-// Function to search for nearby mosques using Overpass API
+// Find nearby mosques using Overpass API
 function findNearbyMosques(location) {
   const [lat, lon] = location;
   const url = `https://overpass-api.de/api/interpreter?data=[out:json][timeout:25];(node["amenity"="place_of_worship"]["religion"="muslim"](around:5000,${lat},${lon}););out body;`;
@@ -88,46 +92,58 @@ function findNearbyMosques(location) {
     });
 }
 
-// Function to display mosques on the map and in a list
+// Display mosques with distance
 function displayMosques(mosques) {
-  const mosqueList = document.getElementById("mosque-list");
-  mosqueList.innerHTML = ""; // Clear previous list items
-
-  mosques.forEach((mosque) => {
-    const { lat, lon, tags } = mosque;
-    const name = tags.name || "Unnamed Mosque";
-
-    // Add a marker on the map
-    L.marker([lat, lon])
-      .addTo(map)
-      .bindPopup(`<strong>${name}</strong>`);
-
-    // Add to the list view
-    const listItem = document.createElement("li");
-    listItem.innerHTML = `<strong>${name}</strong>`;
-    mosqueList.appendChild(listItem);
-  });
-}
-
-// Function to search for a location manually (optional)
-function searchLocation(query) {
-  const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`;
-
-  fetch(url)
-    .then((response) => response.json())
-    .then((data) => {
-      if (data.length > 0) {
-        const { lat, lon } = data[0];
-        map.setView([lat, lon], 14);
-        addUserLocationMarker(lat, lon);
-      } else {
-        alert("Location not found. Please try again.");
-      }
-    })
-    .catch((error) => {
-      console.error("Error searching location:", error);
+    const mosqueList = document.getElementById("mosque-list");
+    mosqueList.innerHTML = ""; // Clear previous list items
+  
+    // Calculate distance for each mosque and add it to the object
+    const mosquesWithDistance = mosques.map((mosque) => {
+      const { lat, lon } = mosque;
+      const distance = calculateDistance(userLocation[0], userLocation[1], lat, lon);
+      return { ...mosque, distance }; // Add distance to each mosque object
     });
+  
+    // Sort mosques by distance (ascending)
+    mosquesWithDistance.sort((a, b) => a.distance - b.distance);
+  
+    // Display each mosque in the sorted order
+    mosquesWithDistance.forEach((mosque) => {
+      const { lat, lon, tags, distance } = mosque;
+      const name = tags.name || "Unnamed Mosque";
+  
+      // Add a marker on the map
+      L.marker([lat, lon])
+        .addTo(map)
+        .bindPopup(`<strong>${name}</strong><br>Distance: ${distance.toFixed(2)} km`);
+  
+      // Add to the list view
+      const listItem = document.createElement("li");
+      listItem.innerHTML = `<strong>${name}</strong><br>Distance: ${distance.toFixed(2)} km`;
+      mosqueList.appendChild(listItem);
+    });
+  }
+  
+
+// Calculate the distance using Haversine formula
+function calculateDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371; // Radius of the Earth in kilometers
+  const dLat = degToRad(lat2 - lat1);
+  const dLon = degToRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(degToRad(lat1)) *
+      Math.cos(degToRad(lat2)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c; // Distance in kilometers
 }
 
-// Event listener for the "Find Nearest Mosques" button
+// Convert degrees to radians
+function degToRad(deg) {
+  return deg * (Math.PI / 180);
+}
+
+// Add event listener to the button
 document.getElementById("getLocationBtn").addEventListener("click", getUserLocation);
