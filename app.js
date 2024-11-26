@@ -94,35 +94,45 @@ function findNearbyMosques(location) {
 
 // Display mosques with distance
 function displayMosques(mosques) {
-  const mosqueList = document.getElementById("mosque-list");
-  mosqueList.innerHTML = ""; // Clear previous list items
-
-  // Calculate distance for each mosque and add it to the object
-  const mosquesWithDistance = mosques.map((mosque) => {
-    const { lat, lon } = mosque;
-    const distance = calculateDistance(userLocation[0], userLocation[1], lat, lon);
-    return { ...mosque, distance }; // Add distance to each mosque object
-  });
-
-  // Sort mosques by distance (ascending)
-  mosquesWithDistance.sort((a, b) => a.distance - b.distance);
-
-  // Display each mosque in the sorted order
-  mosquesWithDistance.forEach((mosque) => {
-    const { lat, lon, tags, distance } = mosque;
-    const name = tags.name || "Unnamed Mosque";
-
-    // Add a marker on the map
-    L.marker([lat, lon])
-      .addTo(map)
-      .bindPopup(`<strong>${name}</strong><br>Distance: ${distance.toFixed(2)} km`);
-
-    // Add to the list view
-    const listItem = document.createElement("li");
-    listItem.innerHTML = `<strong>${name}</strong><br>Distance: ${distance.toFixed(2)} km`;
-    mosqueList.appendChild(listItem);
-  });
-}
+    const mosqueList = document.getElementById("mosque-list");
+    mosqueList.innerHTML = ""; // Clear previous list items
+  
+    // Calculate distance for each mosque and add it to the object
+    const mosquesWithDistance = mosques.map((mosque) => {
+      const { lat, lon } = mosque;
+      const distance = calculateDistance(userLocation[0], userLocation[1], lat, lon);
+      return { ...mosque, distance }; // Add distance to each mosque object
+    });
+  
+    // Sort mosques by distance (ascending)
+    mosquesWithDistance.sort((a, b) => a.distance - b.distance);
+  
+    // Display each mosque in the sorted order
+    mosquesWithDistance.forEach((mosque) => {
+      const { lat, lon, tags, distance } = mosque;
+      const name = tags.name || "Unnamed Mosque";
+  
+      // Add a marker on the map
+      L.marker([lat, lon])
+        .addTo(map)
+        .bindPopup(
+          `<strong>${name}</strong><br>Distance: ${distance.toFixed(2)} km`
+        );
+  
+      // Create Waze URL
+      const wazeUrl = `https://waze.com/ul?ll=${lat},${lon}&navigate=yes`;
+  
+      // Add to the list view
+      const listItem = document.createElement("li");
+      listItem.innerHTML = `
+        <strong>${name}</strong><br>
+        Distance: ${distance.toFixed(2)} km 
+        <a href="${wazeUrl}" target="_blank" rel="noopener noreferrer">Open in Waze</a>
+      `;
+      mosqueList.appendChild(listItem);
+    });
+  }
+  
 
 // Calculate the distance using Haversine formula
 function calculateDistance(lat1, lon1, lat2, lon2) {
